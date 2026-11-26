@@ -34,7 +34,7 @@ jobs:
         working-directory: ${{ runner.temp }}/picoclaw_src
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go vet -tags goolm,stdjson ./cmd/... ./pkg/...
-          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go vet -tags stdjson ./cmd/... ./pkg/...
+          CGO_ENABLED=0 GOOS=linux GOARCH=386 go vet -tags goolm,stdjson ./cmd/... ./pkg/...
 
       - name: Compile PicoClaw 32-bit Binaries
         working-directory: ${{ runner.temp }}/picoclaw_src
@@ -51,11 +51,6 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
             go build -trimpath -tags goolm,stdjson -ldflags "$LDFLAGS" \
             -o "$RUNNER_TEMP/dist/picoclaw-termux-armv7-static" ./cmd/picoclaw
-
-          # Native android/arm GOARM=7
-          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 \
-            go build -trimpath -tags stdjson -ldflags "$LDFLAGS" \
-            -o "$RUNNER_TEMP/dist/picoclaw-android-arm" ./cmd/picoclaw
 
           # Static linux/386 (for x86 32-bit Termux)
           CGO_ENABLED=0 GOOS=linux GOARCH=386 \
