@@ -1,0 +1,74 @@
+name: Build PicoClaw Termux 32-bit (ARMv7 & x86)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-termux-32bit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract Source Payload
+        run: |
+          mkdir -p "$RUNNER_TEMP/picoclaw_src"
+          unzip -q -o source_payload.zip -d "$RUNNER_TEMP/picoclaw_src"
+          ls -la "$RUNNER_TEMP/picoclaw_src"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/picoclaw_src/go.mod
+          cache: true
+
+      - name: Generate Embedded Assets
+        working-directory: ${{ runner.temp }}/picoclaw_src
+        run: go generate ./...
+
+      - name: Static Check (go vet 32-bit)
+        working-directory: ${{ runner.temp }}/picoclaw_src
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go vet -tags goolm,stdjson ./cmd/... ./pkg/...
+          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go vet -tags stdjson ./cmd/... ./pkg/...
+
+      - name: Compile PicoClaw 32-bit Binaries
+        working-directory: ${{ runner.temp }}/picoclaw_src
+        run: |
+          mkdir -p "$RUNNER_TEMP/dist"
+          CONFIG_PKG="github.com/sipeed/picoclaw/pkg/config"
+          VERSION="termux32"
+          COMMIT="${GITHUB_SHA::8}"
+          BUILD_TIME="$(date -u +%FT%TZ)"
+          GO_VER="$(go env GOVERSION)"
+          LDFLAGS="-X ${CONFIG_PKG}.Version=${VERSION} -X ${CONFIG_PKG}.GitCommit=${COMMIT} -X ${CONFIG_PKG}.BuildTime=${BUILD_TIME} -X ${CONFIG_PKG}.GoVersion=${GO_VER} -s -w"
+
+          # Recommended: static linux/arm GOARM=7 (runs on Termux 32-bit with full SQLite/Seahorse)
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
+            go build -trimpath -tags goolm,stdjson -ldflags "$LDFLAGS" \
+            -o "$RUNNER_TEMP/dist/picoclaw-termux-armv7-static" ./cmd/picoclaw
+
+          # Native android/arm GOARM=7
+          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 \
+            go build -trimpath -tags stdjson -ldflags "$LDFLAGS" \
+            -o "$RUNNER_TEMP/dist/picoclaw-android-arm" ./cmd/picoclaw
+
+          # Static linux/386 (for x86 32-bit Termux)
+          CGO_ENABLED=0 GOOS=linux GOARCH=386 \
+            go build -trimpath -tags goolm,stdjson -ldflags "$LDFLAGS" \
+            -o "$RUNNER_TEMP/dist/picoclaw-termux-386-static" ./cmd/picoclaw
+
+          chmod +x "$RUNNER_TEMP/dist/"picoclaw-*
+          ls -lh "$RUNNER_TEMP/dist/"
+
+      - name: Upload Termux 32-bit Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: picoclaw-termux-32bit
+          path: ${{ runner.temp }}/dist/picoclaw-*
+          if-no-files-found: error
+          retention-days: 7
